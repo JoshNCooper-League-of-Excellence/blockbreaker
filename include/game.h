@@ -2,6 +2,11 @@
 #define GAME_H
 
 #include "raylib.h"
+#include <dirent.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef enum {
   BLOCK_TYPE_AIR = -1,
@@ -11,6 +16,7 @@ typedef enum {
 } BlockType;
 
 #define SCREEN_WIDTH 800
+#define GRAVITY 0.5
 #define SCREEN_HEIGHT 600
 #define GRID_X 16
 #define GRID_Y 12
@@ -22,5 +28,20 @@ typedef struct {
   Rectangle bounds;
   BlockType blocks[BLOCK_SIZE_Y][BLOCK_SIZE_X];
 } Chunk;
+
+typedef struct {
+  Texture2D *frames;
+  size_t n_frames;
+  size_t frame;
+} Animation;
+
+
+typedef struct {
+  Vector2 position;
+  Vector2 size;
+  Vector2 velocity;
+  Animation animation;
+} Character;
+
 
 #endif

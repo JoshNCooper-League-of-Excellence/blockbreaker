@@ -3,6 +3,7 @@
     "arguments": [
       "/usr/bin/clang",
       "-c",
+      "-Iinclude",
       "-std=c23",
       "main.c"
     ],
@@ -43,6 +44,8 @@
       "-fcoverage-compilation-dir=/home/josh_arch/source/c/game_tutorial",
       "-resource-dir",
       "/usr/lib/clang/19",
+      "-I",
+      "include",
       "-internal-isystem",
       "/usr/lib/clang/19/include",
       "-internal-isystem",
@@ -66,11 +69,11 @@
       "-x",
       "c",
       "-o",
-      "/tmp/main-1fa634.o",
+      "/tmp/main-41e7cd.o",
       "main.c"
     ],
     "directory": "/home/josh_arch/source/c/game_tutorial",
     "file": "/home/josh_arch/source/c/game_tutorial/main.c",
-    "output": "/tmp/main-1fa634.o"
+    "output": "/tmp/main-41e7cd.o"
   }
 ]
