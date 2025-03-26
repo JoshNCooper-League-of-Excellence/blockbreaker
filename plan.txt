@@ -22,5 +22,8 @@ Boilerplate:
 
 Game:
   [x] Setup grid system
-  [ ] Draw textures and colored cubes on the grid.
-  [ ] Implement breaking / placing logic, Handle mouse input and events, on click, etc.
+  [x] Draw textures and colored cubes on the grid.
+  [x] Implement breaking / placing logic, Handle mouse input and events, on click, etc.
+  [x] Add chunks
+  [x] Add selected block thing
+  [ ] Add serialization and deserialization logic.

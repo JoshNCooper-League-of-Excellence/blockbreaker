@@ -1,29 +1,11 @@
 #include "include/raylib.h"
+#include "include/game.h"
+#include "include/serialize.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "stdlib.h"
-#include "time.h"
 #include <stdio.h>
-
-typedef enum {
-  BLOCK_TYPE_AIR = -1,
-  BLOCK_TYPE_GRASS,
-  BLOCK_TYPE_DIRT,
-  BLOCK_TYPE_STONE,
-} BlockType;
-
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 600
-#define GRID_X 16
-#define GRID_Y 12
-#define BLOCK_SIZE_X (int)(SCREEN_WIDTH / GRID_X)
-#define BLOCK_SIZE_Y (int)(SCREEN_HEIGHT / GRID_Y)
-#define N_CHUNKS ((int)24)
-
-typedef struct {
-  Rectangle bounds;
-  BlockType blocks[BLOCK_SIZE_Y][BLOCK_SIZE_X];
-} Chunk;
+#include <string.h>
 
 void chunk_generate(Chunk *chunk, float x_offset) {
   chunk->bounds = (Rectangle){
@@ -95,6 +77,48 @@ void chunk_draw(Chunk *chunk, Texture2D const* textures, int selected_block_type
   }
 }
 
+#include "dirent.h"
+
+void select_filename(char **filename) {
+  DIR *dir = opendir("./");
+  struct dirent *entry;
+  *filename = NULL;
+  char *files[16];
+  int index = 0;
+  while (index < 16 && (entry = readdir(dir)) != NULL) {
+    if (strstr(entry->d_name, ".data") != NULL) {
+      files[index] = entry->d_name;
+      index++;
+    }
+  }
+
+  while (!WindowShouldClose()) {
+    BeginDrawing();
+    ClearBackground(BLACK);
+
+    Vector2 begin = {
+      250, 150
+    };
+    for (int i = 0; i < index; ++i) {
+      char buffer[1024];
+      snprintf(buffer, 1024, "1 : %s", files[i]);
+      DrawText(buffer, begin.x, begin.y + (i * 14), 14, WHITE);
+    }
+
+    for (int key = KEY_ONE; key < KEY_NINE && (key - KEY_ONE) < index; key++) {
+      if (IsKeyPressed(key)) {
+        *filename = strdup(files[key - KEY_ONE]);
+        EndDrawing();
+        goto found_file;
+      }
+    }
+
+    EndDrawing();
+  }
+  found_file:
+  closedir(dir);
+}
+
 int main(void) {
   srand(GetTime());
 
@@ -107,6 +131,7 @@ int main(void) {
       LoadTexture("assets/stone.jpg"),
   };
 
+
   int selected_block_type = BLOCK_TYPE_STONE;
   double ui_action_last_time = 0.0f;
   Camera2D camera = {0};
@@ -117,11 +142,18 @@ int main(void) {
 
   Chunk chunks[24];
 
-  for (int i = 0; i < 24; ++i) {
-    float x_offset = i * (BLOCK_SIZE_X * GRID_X);
-    chunk_generate(&chunks[i], x_offset);
-  } 
+  char * filename;
 
+  reset_world:
+  select_filename(&filename);
+  if (filename && FileExists(filename)) {
+    read_world_from_file(&camera, chunks, filename);
+  } else {
+    for (int i = 0; i < 24; ++i) {
+      float x_offset = i * (BLOCK_SIZE_X * GRID_X);
+      chunk_generate(&chunks[i], x_offset);
+    } 
+  }
   
   while (!WindowShouldClose()) {
     BeginDrawing();
@@ -133,16 +165,37 @@ int main(void) {
       chunk_draw(&chunks[i], textures, selected_block_type, mouse);
     }
 
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_R)) {
+      EndMode2D();
+      EndDrawing();
+    
+      while (true) {
+        BeginDrawing();
+        BeginMode2D(camera);
+        if (WindowShouldClose()) {
+          CloseWindow();
+          return 0;
+        }
+        DrawText("are you sure you want to reset the world?\npress [y/n] to confirm/cancel", 250, 350, 25, RED);
+        if (IsKeyPressed(KEY_Y)) {
+          goto reset_world;
+        } else if (IsKeyPressed(KEY_N)) {
+          break;
+        }
+        EndMode2D();
+        EndDrawing();
+      }
+      continue;
+    }
 
     Vector2 last_pos;
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
       last_pos = GetMousePosition();
-
-    int scroll = GetMouseWheelMove();
-    if (scroll != 0) {
+      DisableCursor();
+    } else if (IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE)) {
+      EnableCursor();
       SetMousePosition(last_pos.x, last_pos.y);
     }
-
 
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
       Vector2 delta = GetMouseDelta();
@@ -208,6 +261,9 @@ int main(void) {
     EndMode2D();
     EndDrawing();
   }
+
+
+  write_world_to_file(&camera, chunks, "game.data");
 
   return 0;
 }
