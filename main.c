@@ -1,5 +1,6 @@
-#include "include/raylib.h"
+#include "dirent.h"
 #include "include/game.h"
+#include "include/raylib.h"
 #include "include/serialize.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -9,10 +10,10 @@
 
 void chunk_generate(Chunk *chunk, float x_offset) {
   chunk->bounds = (Rectangle){
-    .x = x_offset,
-    .y = 0,
-    .width = BLOCK_SIZE_X * GRID_X,
-    .height = BLOCK_SIZE_Y * GRID_Y,
+      .x = x_offset,
+      .y = 0,
+      .width = BLOCK_SIZE_X * GRID_X,
+      .height = BLOCK_SIZE_Y * GRID_Y,
   };
   const int start_depth = 6;
   for (int y = 0; y < BLOCK_SIZE_Y; ++y) {
@@ -25,9 +26,7 @@ void chunk_generate(Chunk *chunk, float x_offset) {
       if (y - start_depth == 0) {
         chunk->blocks[y][x] = BLOCK_TYPE_GRASS;
       } else if (y - start_depth < 2) {
-        chunk->blocks[y][x] = (double)((double)rand() / RAND_MAX) > 0.5
-                                  ? BLOCK_TYPE_GRASS
-                                  : BLOCK_TYPE_DIRT;
+        chunk->blocks[y][x] = BLOCK_TYPE_DIRT;
       } else if (y - start_depth < (GRID_Y)) {
         chunk->blocks[y][x] = (double)((double)rand() / RAND_MAX) > 0.5
                                   ? BLOCK_TYPE_STONE
@@ -37,7 +36,8 @@ void chunk_generate(Chunk *chunk, float x_offset) {
   }
 }
 
-void chunk_draw(Chunk *chunk, Texture2D const* textures, int selected_block_type, Vector2 mouse) {
+void chunk_draw(Chunk *chunk, Texture2D const *textures,
+                int selected_block_type, Vector2 mouse, Sound const *sounds) {
   bool pointer_in_chunk = CheckCollisionPointRec(mouse, chunk->bounds);
 
   for (int y = 0; y < GRID_Y; ++y) {
@@ -50,10 +50,10 @@ void chunk_draw(Chunk *chunk, Texture2D const* textures, int selected_block_type
       BlockType block = chunk->blocks[y][x];
       Texture2D texture = textures[block];
       Rectangle texture_rect = {
-          .x = chunk->bounds.x + x * BLOCK_SIZE_X,
-          .y = y * BLOCK_SIZE_Y,
-          .width = texture.width,
-          .height = texture.height,
+        .x = 0,
+        .y = 0,
+        .width = texture.width,
+        .height = texture.height,
       };
 
       if (block != BLOCK_TYPE_AIR) { // We don't draw air. DUh!.
@@ -68,16 +68,16 @@ void chunk_draw(Chunk *chunk, Texture2D const* textures, int selected_block_type
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
             block != BLOCK_TYPE_AIR) {
           chunk->blocks[y][x] = BLOCK_TYPE_AIR;
+          PlaySound(sounds[0]);
         } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) &&
                    block == BLOCK_TYPE_AIR) {
+          PlaySound(sounds[1]);
           chunk->blocks[y][x] = selected_block_type;
         }
       }
     }
   }
 }
-
-#include "dirent.h"
 
 void select_filename(char **filename) {
   DIR *dir = opendir("./worlds/");
@@ -100,14 +100,12 @@ void select_filename(char **filename) {
     BeginDrawing();
     ClearBackground(BLACK);
 
-    Vector2 begin = {
-      250, 150
-    };
+    Vector2 begin = {250, 150};
 
     DrawText("press the number to load the file.", 128, 128, 24, WHITE);
     for (int i = 0; i < index; ++i) {
       char buffer[1024];
-      snprintf(buffer, 1024, "#%d : %s", i+1, files[i]);
+      snprintf(buffer, 1024, "#%d : %s", i + 1, files[i]);
       DrawText(buffer, begin.x, begin.y + (i * 24), 24, WHITE);
     }
 
@@ -121,7 +119,7 @@ void select_filename(char **filename) {
 
     EndDrawing();
   }
-  found_file:
+found_file:
   closedir(dir);
 }
 
@@ -131,7 +129,8 @@ void save_new_world(Camera2D *camera, Chunk *chunks, char **filename) {
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(BLACK);
-    DrawText("type a new world name, then press enter to save.", 150, 200, 24, WHITE);
+    DrawText("type a new world name, then press enter to save.", 150, 200, 24,
+             WHITE);
     DrawText(buffer, 350, 250, 24, WHITE);
     if (IsKeyPressed(KEY_ENTER)) {
       buffer[index] = '\0';
@@ -162,13 +161,20 @@ void save_new_world(Camera2D *camera, Chunk *chunks, char **filename) {
 int main(void) {
   srand(GetTime());
 
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_MAXIMIZED);
   InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Block Break");
+  InitAudioDevice();
   SetTargetFPS(60);
 
   const Texture2D textures[] = {
       LoadTexture("assets/grass.jpg"),
       LoadTexture("assets/dirt.jpg"),
       LoadTexture("assets/stone.jpg"),
+  };
+
+  const Sound sounds[] = {
+    LoadSound("assets/crunch.wav"),
+    LoadSound("assets/place.wav"),
   };
 
 
@@ -182,9 +188,9 @@ int main(void) {
 
   Chunk chunks[24];
 
-  char * filename;
+  char *filename;
 
-  reset_world:
+reset_world:
   select_filename(&filename);
   if (filename && FileExists(filename)) {
     read_world_from_file(&camera, chunks, filename);
@@ -192,9 +198,9 @@ int main(void) {
     for (int i = 0; i < 24; ++i) {
       float x_offset = i * (BLOCK_SIZE_X * GRID_X);
       chunk_generate(&chunks[i], x_offset);
-    } 
+    }
   }
-  
+
   while (!WindowShouldClose()) {
     BeginDrawing();
     BeginMode2D(camera);
@@ -202,27 +208,28 @@ int main(void) {
 
     Vector2 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
     for (int i = 0; i < N_CHUNKS; ++i) {
-      chunk_draw(&chunks[i], textures, selected_block_type, mouse);
+      chunk_draw(&chunks[i], textures, selected_block_type, mouse, sounds);
     }
 
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_R)) {
       EndMode2D();
       EndDrawing();
-    
+
       while (true) {
         BeginDrawing();
-        BeginMode2D(camera);
+        ClearBackground(BLACK);
         if (WindowShouldClose()) {
           CloseWindow();
           return 0;
         }
-        DrawText("are you sure you want to reset the world?\npress [y/n] to confirm/cancel", 250, 350, 25, RED);
+        DrawText("are you sure you want to reset the world?\npress [y/n] to "
+                 "confirm/cancel",
+                 250, 350, 25, RED);
         if (IsKeyPressed(KEY_Y)) {
           goto reset_world;
         } else if (IsKeyPressed(KEY_N)) {
           break;
         }
-        EndMode2D();
         EndDrawing();
       }
       continue;
@@ -233,6 +240,7 @@ int main(void) {
       EndDrawing();
       save_new_world(&camera, chunks, &filename);
     }
+
     Vector2 last_pos;
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
       last_pos = GetMousePosition();
@@ -245,7 +253,7 @@ int main(void) {
     if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
       Vector2 delta = GetMouseDelta();
       camera.target.x -= delta.x;
-    } 
+    }
 
     int scroll = GetMouseWheelMove();
     if (scroll != 0) {
@@ -261,17 +269,19 @@ int main(void) {
 
     const float ELEMENT_SIZE = BLOCK_SIZE_Y;
 
-    Vector2 ui_start_position = GetScreenToWorld2D((Vector2){
-        (float)SCREEN_WIDTH / 2 - (2 * ELEMENT_SIZE),
-        SCREEN_HEIGHT - ELEMENT_SIZE,
-    }, camera);
+    Vector2 ui_start_position = GetScreenToWorld2D(
+        (Vector2){
+            (float)SCREEN_WIDTH / 2 - (2 * ELEMENT_SIZE),
+            SCREEN_HEIGHT - ELEMENT_SIZE,
+        },
+        camera);
 
     if (delta < 1.0) {
       for (int i = 0; i < 3; ++i) {
         Texture2D texture = textures[i];
         Rectangle texture_rect = {
-            .x = ui_start_position.x,
-            .y = ui_start_position.y,
+            .x = 0,
+            .y = 0,
             .width = texture.width,
             .height = texture.height,
         };
@@ -306,7 +316,6 @@ int main(void) {
     EndMode2D();
     EndDrawing();
   }
-
 
   write_world_to_file(&camera, chunks, "game.data");
 
