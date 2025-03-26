@@ -80,7 +80,7 @@ void chunk_draw(Chunk *chunk, Texture2D const* textures, int selected_block_type
 #include "dirent.h"
 
 void select_filename(char **filename) {
-  DIR *dir = opendir("./");
+  DIR *dir = opendir("./worlds/");
   struct dirent *entry;
   *filename = NULL;
   char *files[16];
@@ -92,6 +92,10 @@ void select_filename(char **filename) {
     }
   }
 
+  if (index == 0) {
+    return;
+  }
+
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(BLACK);
@@ -99,10 +103,12 @@ void select_filename(char **filename) {
     Vector2 begin = {
       250, 150
     };
+
+    DrawText("press the number to load the file.", 128, 128, 24, WHITE);
     for (int i = 0; i < index; ++i) {
       char buffer[1024];
-      snprintf(buffer, 1024, "1 : %s", files[i]);
-      DrawText(buffer, begin.x, begin.y + (i * 14), 14, WHITE);
+      snprintf(buffer, 1024, "#%d : %s", i+1, files[i]);
+      DrawText(buffer, begin.x, begin.y + (i * 24), 24, WHITE);
     }
 
     for (int key = KEY_ONE; key < KEY_NINE && (key - KEY_ONE) < index; key++) {
@@ -117,6 +123,40 @@ void select_filename(char **filename) {
   }
   found_file:
   closedir(dir);
+}
+
+void save_new_world(Camera2D *camera, Chunk *chunks, char **filename) {
+  char buffer[1024] = {0};
+  int index = 0;
+  while (!WindowShouldClose()) {
+    BeginDrawing();
+    ClearBackground(BLACK);
+    DrawText("type a new world name, then press enter to save.", 150, 200, 24, WHITE);
+    DrawText(buffer, 350, 250, 24, WHITE);
+    if (IsKeyPressed(KEY_ENTER)) {
+      buffer[index] = '\0';
+      char *copy = strdup(buffer);
+      snprintf(buffer, 1024, "worlds/%s.data", copy);
+      free(copy);
+      if (*filename) {
+        free(*filename);
+      }
+      *filename = strdup(buffer);
+      write_world_to_file(camera, chunks, buffer);
+      return;
+    } else if (IsKeyPressed(KEY_BACKSPACE) && index >= 0) {
+      buffer[index--] = '\0';
+      if (index < 0) {
+        index = 0;
+      }
+    } else {
+      char ch = GetCharPressed();
+      if (ch != 0) {
+        buffer[index++] = ch;
+      }
+    }
+    EndDrawing();
+  }
 }
 
 int main(void) {
@@ -188,6 +228,11 @@ int main(void) {
       continue;
     }
 
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_S)) {
+      EndMode2D();
+      EndDrawing();
+      save_new_world(&camera, chunks, &filename);
+    }
     Vector2 last_pos;
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
       last_pos = GetMousePosition();
