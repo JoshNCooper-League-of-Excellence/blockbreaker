@@ -203,64 +203,58 @@ fn Texture2D animation_step(Animation *animation) {
   return texture;
 }
 
-fn void check_chunk_collision(Character *character, Chunk *chunk, Rectangle *new_bounds) {
-  int start_x = Clamp((new_bounds->x - chunk->bounds.x) / BLOCK_SIZE_X, 0, GRID_X);
-  int end_x = Clamp((new_bounds->x + new_bounds->width - chunk->bounds.x) / BLOCK_SIZE_X, 0, GRID_X);
-  int start_y = Clamp((new_bounds->y - chunk->bounds.y) / BLOCK_SIZE_Y, 0, GRID_Y);
-  int end_y = Clamp((new_bounds->y + new_bounds->height - chunk->bounds.y) / BLOCK_SIZE_Y, 0, GRID_Y);
+fn void check_chunk_collision(Character *character, Chunk *chunks, Rectangle *new_bounds) {
+  int start_x = floor(Clamp(new_bounds->x / BLOCK_SIZE_X, 0, N_CHUNKS * GRID_X));
+  int end_x = ceil(Clamp((new_bounds->x + new_bounds->width) / BLOCK_SIZE_X, 0, N_CHUNKS * GRID_X));
+  int start_y = floor(Clamp(new_bounds->y / BLOCK_SIZE_Y, 0, GRID_Y));
+  int end_y = ceil(Clamp((new_bounds->y + new_bounds->height) / BLOCK_SIZE_Y, 0, GRID_Y));
 
-  for (int y = start_y; y <= end_y; y++) {
-    for (int x = start_x; x <= end_x; x++) {
-      if (chunk->blocks[y][x] != BLOCK_TYPE_AIR) {
-        Rectangle block_rect = {
-            .x = chunk->bounds.x + x * BLOCK_SIZE_X,
-            .y = chunk->bounds.y + y * BLOCK_SIZE_Y,
-            .width = BLOCK_SIZE_X,
-            .height = BLOCK_SIZE_Y,
-        };
+  for (int abs_x = start_x; abs_x < end_x; abs_x++) {
+    Chunk *chunk = &chunks[abs_x / GRID_X];
+    int x = abs_x - chunk->bounds.x / BLOCK_SIZE_X;
+    for (int abs_y = start_y; abs_y < end_y; abs_y++) {
+      int y = abs_y - chunk->bounds.y;
+      if (chunk->blocks[y][x] == BLOCK_TYPE_AIR) {
+        continue;
+      }
+      Rectangle block_rect = {
+          .x = chunk->bounds.x + x * BLOCK_SIZE_X,
+          .y = chunk->bounds.y + y * BLOCK_SIZE_Y,
+          .width = BLOCK_SIZE_X,
+          .height = BLOCK_SIZE_Y,
+      };
 
-        if (CheckCollisionRecs(*new_bounds, block_rect)) {
-          Vector2 char_center = {new_bounds->x + new_bounds->width / 2,
-                                 new_bounds->y + new_bounds->height / 2};
-          Vector2 block_center = {block_rect.x + block_rect.width / 2,
-                                  block_rect.y + block_rect.height / 2};
+      Vector2 char_center = {new_bounds->x + new_bounds->width / 2,
+                              new_bounds->y + new_bounds->height / 2};
+      Vector2 block_center = {block_rect.x + block_rect.width / 2,
+                              block_rect.y + block_rect.height / 2};
 
-          Vector2 collision_normal = Vector2Subtract(char_center, block_center);
-          float overlap_x = (block_rect.width / 2 + new_bounds->width / 2) - fabs(collision_normal.x);
-          float overlap_y = (block_rect.height / 2 + new_bounds->height / 2) - fabs(collision_normal.y);
+      Vector2 collision_normal = Vector2Subtract(char_center, block_center);
+      float h_offset = (block_rect.width + new_bounds->width) / 2;
+      float v_offset = (block_rect.height + new_bounds->height) / 2;
+      float overlap_x = h_offset - fabs(collision_normal.x);
+      float overlap_y = v_offset - fabs(collision_normal.y);
 
-          if (overlap_y < overlap_x) {
-            if (collision_normal.y > 0) {
-              new_bounds->y = block_rect.y + block_rect.height;
-            } else {
-              new_bounds->y = block_rect.y - new_bounds->height;
-            }
-            character->velocity.y = 0;
-          } else {
-            if (collision_normal.y == 0) {
-              // Prioritize vertical collision if character is on the ground
-              if (character->velocity.y > 0) {
-                new_bounds->y = block_rect.y - new_bounds->height;
-              } else if (character->velocity.y < 0) {
-                new_bounds->y = block_rect.y + block_rect.height;
-              }
-              character->velocity.y = 0;
-            } else {
-              if (collision_normal.x > 0) {
-                new_bounds->x = block_rect.x + block_rect.width;
-              } else {
-                new_bounds->x = block_rect.x - new_bounds->width;
-              }
-              character->velocity.x = 0;
-            }
-          }
+      if (overlap_y < overlap_x) {
+        if (collision_normal.y > 0) {
+          new_bounds->y = block_rect.y + v_offset;
+        } else {
+          new_bounds->y = block_rect.y - v_offset;
         }
+        character->velocity.y = 0;
+      } else {
+        if (collision_normal.x > 0) {
+          new_bounds->x = block_rect.x + h_offset;
+        } else {
+          new_bounds->x = block_rect.x - h_offset;
+        }
+        character->velocity.x = 0;
       }
     }
   }
 }
 
-fn void character_physics(Character *character, Chunk *left, Chunk *chunk, Chunk *right, Vector2 world_size) {
+fn void character_physics(Character *character, Chunk *chunks, Vector2 world_size) {
   character->velocity.y += GRAVITY;
 
   Rectangle new_bounds = {
@@ -270,13 +264,7 @@ fn void character_physics(Character *character, Chunk *left, Chunk *chunk, Chunk
     .height = character->size.y
   };
 
-  check_chunk_collision(character, chunk, &new_bounds);
-
-  if (new_bounds.x < chunk->bounds.x && left != NULL)
-    check_chunk_collision(character, left, &new_bounds);
-
-  if (new_bounds.x + new_bounds.width > chunk->bounds.x + chunk->bounds.width && right != NULL)
-    check_chunk_collision(character, right, &new_bounds);
+  check_chunk_collision(character, chunks, &new_bounds);
 
   character->position = Vector2Clamp((Vector2){new_bounds.x, new_bounds.y}, Vector2Zero(), world_size);
   character->velocity = Vector2Scale(character->velocity, .98f);
@@ -385,25 +373,20 @@ reset_world:
     BeginMode2D(camera);
     ClearBackground(SKYBLUE);
 
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_A)) {
+      int x = 0;
+    }
+
     // Update game.
     Vector2 mouse = GetScreenToWorld2D(GetMousePosition(), camera);
+    character_physics(&character, chunks, world_size);
+    character_draw(&character);
     for (int i = 0; i < N_CHUNKS; ++i) {
       Chunk *chunk = &chunks[i];
-      if (CheckCollisionRecs(chunk->bounds, character_get_bounds(&character))) {
-        Chunk *left, *current = chunk, *right;
-        if (i > 0) {
-          left = &chunks[i-1];
-        }
-        if (i < N_CHUNKS - 1) {
-          right = &chunks[i+1];
-        }
-        character_physics(&character, left, chunk, right, world_size);
-        character_draw(&character);
-        camera.target = character.position;
-        camera.offset = (Vector2){GetScreenWidth() / 2.0, GetScreenHeight() / 2.0};
-      }
       chunk_draw(chunk, textures, selected_block_type, mouse, sounds);
     }
+    camera.target = character.position;
+    camera.offset = (Vector2){GetScreenWidth() / 2.0, GetScreenHeight() / 2.0};
 
     { // Input stuff.
 
